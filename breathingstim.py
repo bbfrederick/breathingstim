@@ -13,9 +13,9 @@ import numpy as np
 
 def draw_expanding_indicator(win, value, diameter=1.0, lobes=6, minval=0.5, maxval=1.0):
     currentsize = (value * (maxval - minval) + minval) * diameter
-    acircle = visual.Circle(win, radius=currentsize, edges=2, units='pix')
+    acircle = visual.Circle(win, radius=currentsize, edges=2, units="pix")
     for i in range(lobes):
-        angle=i * 360.0/lobes
+        angle = i * 360.0 / lobes
         xloc = 0.5 * currentsize * np.sin(angle)
         yloc = 0.5 * currentsize * np.cos(angle)
         print(xloc, yloc, currentsize)
@@ -23,18 +23,18 @@ def draw_expanding_indicator(win, value, diameter=1.0, lobes=6, minval=0.5, maxv
         acircle.size = currentsize
         acircle.opacity = 0.5
         acircle.draw()
-        
-        
-win = visual.Window(size=(500, 500), monitor='testMonitor', units='norm')
+
+
+win = visual.Window(size=(500, 500), monitor="testMonitor", units="norm")
 mouse = event.Mouse()
-txt = 'click the shape to quit\nscroll to adjust circle'
-instr = visual.TextStim(win, text=txt, pos=(0, -.7), opacity=0.5)
-msg = visual.TextStim(win, text=' ', pos=(0, -.4))
+txt = "click the shape to quit\nscroll to adjust circle"
+instr = visual.TextStim(win, text=txt, pos=(0, -0.7), opacity=0.5)
+msg = visual.TextStim(win, text=" ", pos=(0, -0.4))
 
 
 # define a buffer zone around the mouse for proximity detection:
 # use pix units just to show that it works to mix (shape and mouse use norm units)
-bufzone = visual.Circle(win, radius=30, edges=13, units='pix')
+bufzone = visual.Circle(win, radius=30, edges=13, units="pix")
 
 # loop until detect a click inside the shape:
 while not False:

@@ -12,10 +12,12 @@ offline, without requiring either a scanner or a hardware sync pulse emulator.
 
 __author__ = "Blaise Frederick"
 
-from psychopy import visual, event, core, gui
+# from psychopy import visual, event, core, gui
 import numpy as np
-from psychopy.hardware.emulator import SyncGenerator, launchScan
-from psychopy_visionscience.radial import RadialStim
+
+# from psychopy.hardware.emulator import SyncGenerator, launchScan
+# from psychopy_visionscience.radial import RadialStim
+import matplotlib.pyplot as plt
 
 ################################################
 # Configurable parameters
@@ -34,23 +36,6 @@ def drawcurrent(starttime, contrastvalue, flashPeriod):
         return -contrastvalue
 
 
-def makewedge(thecolor, thecolorspace):
-    thewedge = RadialStim(
-        win,
-        tex="sqrXsqr",
-        color=thecolor,
-        size=2.0,
-        units="height",
-        visibleWedge=[0, 360],
-        radialCycles=radcycs,
-        colorSpace=thecolorspace,
-        angularCycles=angcycs,
-        interpolate=False,
-        autoLog=False,
-    )  # this stim changes too much for autologging to be useful
-    return thewedge
-
-
 def readvecs(inputfilename):
     file = open(inputfilename)
     lines = file.readlines(MAXLINES)
@@ -65,6 +50,41 @@ def readvecs(inputfilename):
     return np.transpose(1.0 * inputvec[:, 0:numvals])
 
 
+def readbstims(thefilename, numtrs, tr, timestep):
+    valarray = readvecs(thefilename)
+    print(valarray)
+    starttime, startval = valarray[0, :]
+    finishtime = valarray[-1, 0]
+    print(f"{starttime=}, {finishtime=}, {timestep=}")
+
+    numsteps = int(finishtime / timestep) + 1
+    specifiedvals = np.zeros((numsteps), dtype=float)
+    print(f"{numsteps=}, {specifiedvals.shape=}")
+    whichstep = 0
+    for i in range(1, valarray.shape[0]):
+        endtime, endval = valarray[i]
+        print(f"{i}: {starttime=}, {endtime=}, {startval=}, {endval=}")
+        startindex = int(starttime / timestep)
+        endindex = int(endtime / timestep)
+        segsize = endindex - startindex
+        print(f"step {i}: {startindex=}, {endindex=}, {segsize=}")
+        specifiedvals[startindex:endindex] = np.linspace(
+            startval, endval, num=segsize, endpoint=False, dtype=float
+        )
+        starttime = endtime
+        startval = endval
+    numoutputvals = int(numtrs * (tr / timestep))
+    outputvals = np.zeros((numoutputvals), dtype=float)
+    if numoutputvals > numsteps:
+        outputvals[:numsteps] = specifiedvals
+        outputvals[numsteps:] = specifiedvals[-1]
+    elif numoutputvals == numsteps:
+        outputvals = specifiedvals
+    else:
+        outputvals = specifiedvals[:numoutputvals]
+    return outputvals
+
+
 # execution starts here
 
 # settings for launchScan:
@@ -76,6 +96,7 @@ MR_settings = {
     "sound": False,  # in test mode only, play a tone as a reminder of scanner noise
 }
 
+"""
 print("MR_settings initialization is done")
 infoDlg = gui.DlgFromDict(MR_settings, title="fMRI parameters", order=["TR", "volumes"])
 if not infoDlg.OK:
@@ -86,22 +107,23 @@ filename = gui.fileOpenDlg(
 )
 if not filename:
     core.quit()
-valarray = readvecs(filename[0])
 
 win = visual.Window(
     [1024, 768], fullscr=True
 )  # this has been moved up to the stimulus definition
 globalClock = core.Clock()
+"""
 
+filename = ["box4.bstim"]
 # summary of run timing, for each key press:
 output = "vol    onset key\n"
 for i in range(-1 * MR_settings["skip"], 0):
     output += "%d prescan skip (no sync)\n" % i
 
 key_code = MR_settings["sync"]
-if debug:
-    counter = visual.TextStim(win, height=0.05, pos=(0.8, 0.95), color=win.rgb + 0.5)
-    counter.setText("")
+#if debug:
+#    counter = visual.TextStim(win, height=0.05, pos=(0.8, 0.95), color=win.rgb + 0.5)
+#    counter.setText("")
 pause_during_delay = MR_settings["TR"] > 0.3
 sync_now = False
 
@@ -116,13 +138,12 @@ max_slippage = 0.02  # how long to allow before treating a "slow" sync as missed
 # set some stimulus values here
 radcycs = 6
 angcycs = 8
-print(valarray)
+
 
 # make two wedges (in opposite contrast) and alternate them for flashing
-thewedge = makewedge((1.0, 0.0, 0.0), "rgb")
-fixation = visual.Circle(win, radius=0.01, units="height")
+"""fixation = visual.Circle(win, radius=0.01, units="height")
 fixation.setFillColor((0, 0.5, 0))
-fixation.setLineColor((0, 0.5, 0))
+fixation.setLineColor((0, 0.5, 0))"""
 
 contrasttvalue = 0
 frequencyvalue = 8.0
@@ -130,54 +151,34 @@ flashPeriod = 1.0 / frequencyvalue  # seconds for one B-W cycle (ie 1/Hz)
 flickerstartphase = 0.0
 starttime = 0.0
 
-stim = thewedge
-fp = fixation
-fp.draw()
+#fp = fixation
+#fp.draw()
 
-# turn valarray into a list of values for each TR
-flashPeriods = np.zeros((MR_settings["volumes"]), dtype="float")
-contrasts = np.zeros((MR_settings["volumes"]), dtype="float")
-
-# select a timestep that is ~0.1 seconds
+# set a timestep that is ~0.1 seconds but is an integral divisor of TR
 stepspertr = int(np.round(MR_settings["TR"] / 0.1, 0))
 timestep = MR_settings["TR"] / stepspertr
-starttime, startval = valarray[0, :]
-finishtime = valarray[-1, 0]
-print(f"{starttime=}, {finishtime=}, {timestep=}")
 
-numsteps = int(finishtime / timestep) + 1
-outputvals = np.zeros((numsteps), dtype=float)
-print(f"{numsteps=}, {outputvals.shape=}")
-
-whichstep = 0
-for i in range(1, valarray.shape[0]):
-    endtime, endval = valarray[i]
-    print(f"{i}: {starttime=}, {endtime=}, {startval=}, {endval=}")
-    startindex = int(starttime / timestep)
-    endindex = int(endtime / timestep)
-    segsize = endindex - startindex
-    print(f"step {i}: {startindex=}, {endindex=}, {segsize=}")
-    outputvals[startindex:endindex] = np.linspace(startval, endval, num=segsize, endpoint=False, dtype=float)
-    starttime = endtime
-    startval = endval
+# generate a list of values for each TR
+outputvals = readbstims(
+    filename[0], MR_settings["TR"], MR_settings["volumes"], timestep
+)
 
 for i in range(len(outputvals)):
     print(i * timestep, outputvals[i])
-    
-    
+
+plt.plot(outputvals)
+plt.show()
+
+"""
 # if valarray has three columns, they are onset time, contrast value, and flicker frequency value
 # if valarray has two columns, they are onset time, and contrast value (flicker frequency is set to 8.0)
 # onset time is in TRs
 # the first TR is number 0
-if len(valarray[:, 0]) == 3:
-    currentflashPeriod = 1.0 / valarray[2, whichstim]
-else:
-    currentflashPeriod = 1.0 / 8.0
 whichstim = 1
-numvalentries = len(valarray[0, :])
+numvalentries = len(outputvals)
 
-# for each TR, determine the contrast and flicker frequency (one value per TR)
-print("TR   contrast    flashperiod")
+# for each TR, queue up the values to be displayed (stepspertr values per TR)
+print("TR   step    value")
 for i in range(0, MR_settings["volumes"]):
     # print("waiting for",int(valarray[0,whichstim]))
     if i >= int(valarray[0, whichstim]):
@@ -261,3 +262,4 @@ print(
     "For the test, there should be 5 trials (vol 0..4, key 5), with three simulated subject responses (a, b, c)"
 )
 core.quit()
+"""
