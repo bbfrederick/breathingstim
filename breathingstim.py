@@ -7,8 +7,8 @@ Demo for psychopy.visual.ShapeStim.contains() and .overlaps()
 Also inherited by various other stimulus types.
 """
 
-from psychopy import visual, event, core
 import numpy as np
+from psychopy import core, event, visual
 
 
 def draw_expanding_indicator(win, value, diameter=1.0, lobes=6, minval=0.5, maxval=1.0):

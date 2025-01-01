@@ -12,28 +12,27 @@ offline, without requiring either a scanner or a hardware sync pulse emulator.
 
 __author__ = "Blaise Frederick"
 
-import sys
-from psychopy import visual, event, core, gui
 import numpy as np
-
-from psychopy import plugins
+from psychopy import core, event, gui, plugins, visual
 
 plugins.activatePlugins()
 
-from psychopy.hardware.emulator import SyncGenerator, launchScan
-
 import matplotlib.pyplot as plt
+from psychopy.hardware.emulator import SyncGenerator, launchScan
 
 ################################################
 MAXLINES = 10000
 
-def set_expanding_indicator(value, stim, diameter=1.0, lobes=6, minval=0.25, maxval=0.5):
+
+def set_expanding_indicator(
+    value, stim, diameter=1.0, lobes=6, minval=0.25, maxval=0.5
+):
     currentsize = (value * (maxval - minval) + minval) * diameter
     for i in range(lobes):
-        angle=i * 360.0/lobes
+        angle = i * 360.0 / lobes
         xloc = 0.5 * diameter * np.sin(angle)
         yloc = 0.5 * diameter * np.cos(angle)
-        
+
 
 def valtopos(xval, yval, xoffset=0.0, xscale=0.25, yoffset=0.0, yscale=0.25):
     xpos = xval * xscale + xoffset
@@ -56,10 +55,10 @@ def readvecs(inputfilename):
 
 
 def readandprocessstims(
-    thefilename, 
-    numtrs, 
-    tr, 
-    timestep, 
+    thefilename,
+    numtrs,
+    tr,
+    timestep,
     debug=False,
 ):
     valarray = readvecs(thefilename)
@@ -77,7 +76,9 @@ def readandprocessstims(
     for i in range(1, valarray.shape[0]):
         endtime, endx, endy = valarray[i]
         if debug:
-            print(f"{i}: {starttime=}, {endtime=}, {startx=}, {endx=}, {starty=}, {endy=}")
+            print(
+                f"{i}: {starttime=}, {endtime=}, {startx=}, {endx=}, {starty=}, {endy=}"
+            )
         startindex = int(starttime / timestep)
         endindex = int(endtime / timestep)
         segsize = endindex - startindex
@@ -147,9 +148,9 @@ filename = gui.fileOpenDlg(
 if filename:
     # generate a list of values for each TR
     outputvals = readandprocessstims(
-        filename[0], 
-        MR_settings["TR"], 
-        MR_settings["volumes"], 
+        filename[0],
+        MR_settings["TR"],
+        MR_settings["volumes"],
         timestep,
         debug=False,
     )
@@ -179,13 +180,15 @@ max_slippage = 0.02  # how long to allow before treating a "slow" sync as missed
 # any slippage is almost certainly due to timing issues with your script or PC, and not MR scanner
 
 # make the frame
-frame = visual.Rect(win, 
-    width=targetscale, 
-    height=targetscale, 
+frame = visual.Rect(
+    win,
+    width=targetscale,
+    height=targetscale,
     lineWidth=6.0,
     lineColor=(0, 0.5, 0),
     fillColor=None,
-    units="height")
+    units="height",
+)
 
 # make the target
 target = visual.Circle(win, radius=0.03, units="height")
@@ -193,15 +196,21 @@ target.setFillColor((0, 0.5, 0))
 target.setLineColor((0, 0.5, 0))
 
 # make the preamble
-preamble = visual.TextStim(win, height=0.05, pos=(0.0, 0.0), color=win.rgb + 0.5, units="height")
+preamble = visual.TextStim(
+    win, height=0.05, pos=(0.0, 0.0), color=win.rgb + 0.5, units="height"
+)
 preamble.setText("Breathe normally")
-    
+
 # make the warning
-warning = visual.TextStim(win, height=0.05, pos=(0.0, 0.0), color=win.rgb + 0.5, units="height")
+warning = visual.TextStim(
+    win, height=0.05, pos=(0.0, 0.0), color=win.rgb + 0.5, units="height"
+)
 warning.setText("Exhale")
 
 # make the counter
-counter = visual.TextStim(win, height=0.05, pos=(0.0, -0.4), color=win.rgb + 0.5, units="height")
+counter = visual.TextStim(
+    win, height=0.05, pos=(0.0, -0.4), color=win.rgb + 0.5, units="height"
+)
 counter.setText("")
 
 if not fullscreen:
@@ -260,7 +269,9 @@ while globalClock.getTime() < duration:
         # time to update the display
         if thisindex >= warningendindex:
             outputvalue = outputvals[thisindex - warningendindex, :]
-            newpos = valtopos(outputvalue[0], outputvalue[1], xscale=targetscale, yscale=targetscale)
+            newpos = valtopos(
+                outputvalue[0], outputvalue[1], xscale=targetscale, yscale=targetscale
+            )
             target.setPos(newpos)
             frame.draw()
             target.draw()
