@@ -22,11 +22,18 @@ plugins.activatePlugins()
 
 from psychopy.hardware.emulator import SyncGenerator, launchScan
 
-# from psychopy_visionscience.radial import RadialStim
 import matplotlib.pyplot as plt
 
 ################################################
 MAXLINES = 10000
+
+def set_expanding_indicator(value, stim, diameter=1.0, lobes=6, minval=0.25, maxval=0.5):
+    currentsize = (value * (maxval - minval) + minval) * diameter
+    for i in range(lobes):
+        angle=i * 360.0/lobes
+        xloc = 0.5 * diameter * np.sin(angle)
+        yloc = 0.5 * diameter * np.cos(angle)
+        
 
 def valtopos(xval, yval, xoffset=0.0, xscale=0.25, yoffset=0.0, yscale=0.25):
     xpos = xval * xscale + xoffset
