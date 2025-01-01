@@ -12,10 +12,16 @@ offline, without requiring either a scanner or a hardware sync pulse emulator.
 
 __author__ = "Blaise Frederick"
 
-# from psychopy import visual, event, core, gui
+import sys
+from psychopy import visual, event, core, gui
 import numpy as np
 
-# from psychopy.hardware.emulator import SyncGenerator, launchScan
+from psychopy import plugins
+
+plugins.activatePlugins()
+
+from psychopy.hardware.emulator import SyncGenerator, launchScan
+
 # from psychopy_visionscience.radial import RadialStim
 import matplotlib.pyplot as plt
 
@@ -27,13 +33,10 @@ debug = True  # turn on counter in upper righthand corner
 
 MAXLINES = 10000
 
-
-def drawcurrent(starttime, contrastvalue, flashPeriod):
-    flickerphase = ((globalClock.getTime() - starttime) / flashPeriod) % 1.0
-    if (flickerphase) < (0.5):  # (NB more accurate to use number of frames)
-        return contrastvalue
-    else:
-        return -contrastvalue
+def valtopos(xval, yval, xoffset=0.0, xscale=0.25, yoffset=0.0, yscale=0.25):
+    xpos = xval * xscale + xoffset
+    ypos = yval * yscale + yoffset
+    return [xpos, ypos]
 
 
 def readvecs(inputfilename):
@@ -50,54 +53,84 @@ def readvecs(inputfilename):
     return np.transpose(1.0 * inputvec[:, 0:numvals])
 
 
-def readbstims(thefilename, numtrs, tr, timestep):
+def readandprocessstims(
+    thefilename, 
+    numtrs, 
+    tr, 
+    timestep, 
+    debug=False
+):
     valarray = readvecs(thefilename)
-    print(valarray)
-    starttime, startval = valarray[0, :]
+    if debug:
+        print(valarray)
+    starttime, startx, starty = valarray[0, :]
     finishtime = valarray[-1, 0]
-    print(f"{starttime=}, {finishtime=}, {timestep=}")
-
+    if debug:
+        print(f"{starttime=}, {finishtime=}, {timestep=}")
     numsteps = int(finishtime / timestep) + 1
-    specifiedvals = np.zeros((numsteps), dtype=float)
-    print(f"{numsteps=}, {specifiedvals.shape=}")
+    specifiedvals = np.zeros((numsteps, 3), dtype=float)
+    if debug:
+        print(f"{numsteps=}, {specifiedvals.shape=}")
     whichstep = 0
     for i in range(1, valarray.shape[0]):
-        endtime, endval = valarray[i]
-        print(f"{i}: {starttime=}, {endtime=}, {startval=}, {endval=}")
+        endtime, endx, endy = valarray[i]
+        if debug:
+            print(f"{i}: {starttime=}, {endtime=}, {startx=}, {endx=}, {starty=}, {endy=}")
         startindex = int(starttime / timestep)
         endindex = int(endtime / timestep)
         segsize = endindex - startindex
-        print(f"step {i}: {startindex=}, {endindex=}, {segsize=}")
-        specifiedvals[startindex:endindex] = np.linspace(
-            startval, endval, num=segsize, endpoint=False, dtype=float
-        )
+        segtime = (segsize + 1) * timestep
+        if debug:
+            print(f"step {i}: {startindex=}, {endindex=}, {segsize=}")
+        if startx == endx:
+            # y is changing
+            specifiedvals[startindex:endindex, 0] = startx
+            specifiedvals[startindex:endindex, 1] = np.linspace(
+                starty, endy, num=segsize, endpoint=False, dtype=float
+            )
+        else:
+            # x is changing
+            specifiedvals[startindex:endindex, 0] = np.linspace(
+                startx, endx, num=segsize, endpoint=False, dtype=float
+            )
+            specifiedvals[startindex:endindex, 1] = starty
+        specifiedvals[startindex:endindex, 2] = segtime
         starttime = endtime
-        startval = endval
+        startx = endx
+        starty = endy
     numoutputvals = int(numtrs * (tr / timestep))
-    outputvals = np.zeros((numoutputvals), dtype=float)
+    outputvals = np.zeros((numoutputvals, 3), dtype=float)
     if numoutputvals > numsteps:
-        outputvals[:numsteps] = specifiedvals
-        outputvals[numsteps:] = specifiedvals[-1]
+        outputvals[:numsteps, :] = specifiedvals
+        outputvals[numsteps:, :] = specifiedvals[-1]
     elif numoutputvals == numsteps:
         outputvals = specifiedvals
     else:
-        outputvals = specifiedvals[:numoutputvals]
+        outputvals = specifiedvals[:numoutputvals, :]
     return outputvals
 
 
 # execution starts here
+targetscale = 0.25
+fullscreen = True
+preamblelength = 5.0
+warninglength = 2.0
 
 # settings for launchScan:
 MR_settings = {
-    "TR": 1,  # duration (sec) per volume
-    "volumes": 420,  # number of whole-brain 3D volumes / frames
+    "TR": 1.33,  # duration (sec) per volume
+    "volumes": 200,  # number of whole-brain 3D volumes / frames
     "sync": "t",  # character to use as the sync timing event; assumed to come at start of a volume
     "skip": 0,  # number of volumes lacking a sync pulse at start of scan (for T1 stabilization)
     "sound": False,  # in test mode only, play a tone as a reminder of scanner noise
 }
 
-"""
-print("MR_settings initialization is done")
+# set a timestep that is ~0.1 seconds but is an integral divisor of TR
+stepspertr = int(np.round(MR_settings["TR"] / 0.01, 0))
+timestep = MR_settings["TR"] / stepspertr
+print("MR_settings initialization done")
+
+print("Stimulus initialization started")
 infoDlg = gui.DlgFromDict(MR_settings, title="fMRI parameters", order=["TR", "volumes"])
 if not infoDlg.OK:
     core.quit()
@@ -105,25 +138,34 @@ if not infoDlg.OK:
 filename = gui.fileOpenDlg(
     tryFilePath=initpath, tryFileName=initfile, allowed="*.bstim"
 )
-if not filename:
+if filename:
+    # generate a list of values for each TR
+    outputvals = readandprocessstims(
+        filename[0], 
+        MR_settings["TR"], 
+        MR_settings["volumes"], 
+        timestep,
+        debug=False,
+    )
+    print(f"{outputvals.shape=}")
+    if debug:
+        for i in range(len(outputvals)):
+            print(i, i * timestep, outputvals[i, :])
+else:
     core.quit()
+print("Stimulus initialization done")
 
 win = visual.Window(
-    [1024, 768], fullscr=True
+    [2560, 1440], fullscr=fullscreen, checkTiming=False
 )  # this has been moved up to the stimulus definition
 globalClock = core.Clock()
-"""
 
-filename = ["box4.bstim"]
 # summary of run timing, for each key press:
 output = "vol    onset key\n"
 for i in range(-1 * MR_settings["skip"], 0):
     output += "%d prescan skip (no sync)\n" % i
 
 key_code = MR_settings["sync"]
-#if debug:
-#    counter = visual.TextStim(win, height=0.05, pos=(0.8, 0.95), color=win.rgb + 0.5)
-#    counter.setText("")
 pause_during_delay = MR_settings["TR"] > 0.3
 sync_now = False
 
@@ -134,87 +176,61 @@ infer_missed_sync = False  # best if your script timing works without this, but 
 max_slippage = 0.02  # how long to allow before treating a "slow" sync as missed
 # any slippage is almost certainly due to timing issues with your script or PC, and not MR scanner
 
-# initialize our specific protocol here (checkerflash)
-# set some stimulus values here
-radcycs = 6
-angcycs = 8
+# make the frame
+frame = visual.Rect(win, 
+    width=targetscale, 
+    height=targetscale, 
+    lineWidth=4.0,
+    lineColor=(0, 0.5, 0),
+    fillColor=None,
+    units="height")
 
+# make the target
+target = visual.Circle(win, radius=0.03, units="height")
+target.setFillColor((0, 0.5, 0))
+target.setLineColor((0, 0.5, 0))
 
-# make two wedges (in opposite contrast) and alternate them for flashing
-"""fixation = visual.Circle(win, radius=0.01, units="height")
-fixation.setFillColor((0, 0.5, 0))
-fixation.setLineColor((0, 0.5, 0))"""
+# make the preamble
+preamble = visual.TextStim(win, height=0.05, pos=(0.0, 0.0), color=win.rgb + 0.5, units="height")
+preamble.setText("Breathe normally")
+    
+# make the warning
+warning = visual.TextStim(win, height=0.05, pos=(0.0, 0.0), color=win.rgb + 0.5, units="height")
+warning.setText("Exhale")
 
-contrasttvalue = 0
-frequencyvalue = 8.0
-flashPeriod = 1.0 / frequencyvalue  # seconds for one B-W cycle (ie 1/Hz)
-flickerstartphase = 0.0
-starttime = 0.0
+# make the counter
+counter = visual.TextStim(win, height=0.05, pos=(0.6, -0.4), color=win.rgb + 0.5, units="height")
+counter.setText("")
 
-#fp = fixation
-#fp.draw()
+if not fullscreen:
+    plt.plot(outputvals[:, 0])
+    plt.plot(outputvals[:, 1])
+    plt.show()
 
-# set a timestep that is ~0.1 seconds but is an integral divisor of TR
-stepspertr = int(np.round(MR_settings["TR"] / 0.1, 0))
-timestep = MR_settings["TR"] / stepspertr
-
-# generate a list of values for each TR
-outputvals = readbstims(
-    filename[0], MR_settings["TR"], MR_settings["volumes"], timestep
-)
-
-for i in range(len(outputvals)):
-    print(i * timestep, outputvals[i])
-
-plt.plot(outputvals)
-plt.show()
-
-"""
-# if valarray has three columns, they are onset time, contrast value, and flicker frequency value
-# if valarray has two columns, they are onset time, and contrast value (flicker frequency is set to 8.0)
-# onset time is in TRs
+# place a circle on the screen at a y offset indicated by outputval[i]
 # the first TR is number 0
 whichstim = 1
 numvalentries = len(outputvals)
 
-# for each TR, queue up the values to be displayed (stepspertr values per TR)
-print("TR   step    value")
-for i in range(0, MR_settings["volumes"]):
-    # print("waiting for",int(valarray[0,whichstim]))
-    if i >= int(valarray[0, whichstim]):
-        currentcontrast = valarray[1, whichstim]
-        if len(valarray[:, 0]) == 3:
-            currentflashPeriod = 1.0 / valarray[2, whichstim]
-        else:
-            currentflashPeriod = 1.0 / 8.0
-        if whichstim < numvalentries - 1:
-            whichstim = whichstim + 1
-    contrasts[i] = currentcontrast
-    flashPeriods[i] = currentflashPeriod
-    print(i, "\t", contrasts[i], "\t", flashPeriods[i])
-print("checkerflash initialization is done")
-
 duration = MR_settings["volumes"] * MR_settings["TR"]
 # note: globalClock has been reset to 0.0 by launchScan()
-starttime = 0.0
-contrastvalue = contrasts[0]
-flashPeriod = flashPeriods[0]
-thecontrastvalue = drawcurrent(starttime, contrastvalue, timestep)
-stim.setColor(thecontrastvalue)
+outputvalue = outputvals[0, :]
+newpos = valtopos(outputvalue[0], outputvalue[1], xscale=targetscale, yscale=targetscale)
+target.setPos(newpos)
+frame.draw()
+target.draw()
 win.flip()
 vol = 0
 onset = 0.0
 
 # launch: operator selects Scan or Test (emulate); see API documentation
-vol = launchScan(
-    win, MR_settings, globalClock=globalClock, simResponses=simResponses, wait_msg=""
-)
-
-starttime = 0.0
-contrastvalue = contrasts[vol - 1]
-flashPeriod = flashPeriods[vol - 1]
+vol = launchScan(win, MR_settings, globalClock=globalClock, wait_msg="")
 sync_now = "Experiment start"
 
+currentindex = -1
+preambleendindex = int((preamblelength - warninglength) / timestep)
+warningendindex = int(preamblelength / timestep)
+print("here we go!")
 while globalClock.getTime() < duration:
     allKeys = event.getKeys()
     if "escape" in allKeys:
@@ -232,25 +248,32 @@ while globalClock.getTime() < duration:
             onset = expected_onset
     if sync_now:
         # do your experiment code at this point; for demo, just shows a counter & time
-        startindex = vol * stepspertr
-        starttime = 0.0
-        contrastvalue = contrasts[vol]
-        flashPeriod = flashPeriods[vol]
-        if debug:
-            counter.setText("Volume number: %d\n%.3f seconds" % (vol, onset))
         output += "%3d  %7.3f %s\n" % (vol, onset, sync_now)
-
         vol += 1
         sync_now = False
     # now draw whatever we are drawing
-    thecontrastvalue = drawcurrent(starttime, contrastvalue, flashPeriod)
-    stim.setColor(thecontrastvalue)
-    stim.draw()
-    fp.draw()
-    if debug:
-        counter.draw()
-    win.flip()
-
+    now = globalClock.getTime()
+    thisindex = int(now / timestep)
+    if thisindex > currentindex and thisindex < (warningendindex + outputvals.shape[0]):
+        # time to update the display
+        if thisindex >= warningendindex:
+            outputvalue = outputvals[thisindex - warningendindex, :]
+            newpos = valtopos(outputvalue[0], outputvalue[1], xscale=targetscale, yscale=targetscale)
+            target.setPos(newpos)
+            frame.draw()
+            target.draw()
+            counter.setText(f"Index: {thisindex:5d}, segtime: {outputvalue[2]:.3f}")
+        elif thisindex >= preambleendindex:
+            warning.draw()
+            counter.setText(f"Index: {thisindex:5d}")
+        else:
+            preamble.draw()
+            counter.setText(f"Index: {thisindex:5d}")
+        if debug:
+            counter.draw()
+        win.flip()
+        currentindex = thisindex
+print("now we're done!")
 output += "end of scan (vol 0..%d = %d of %s). duration = %7.3f" % (
     vol,
     MR_settings["volumes"],
@@ -258,8 +281,4 @@ output += "end of scan (vol 0..%d = %d of %s). duration = %7.3f" % (
     globalClock.getTime(),
 )
 print(output)
-print(
-    "For the test, there should be 5 trials (vol 0..4, key 5), with three simulated subject responses (a, b, c)"
-)
 core.quit()
-"""
