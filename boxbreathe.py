@@ -26,11 +26,6 @@ from psychopy.hardware.emulator import SyncGenerator, launchScan
 import matplotlib.pyplot as plt
 
 ################################################
-# Configurable parameters
-initpath = "/Users/frederic/code/breathingstim"
-initfile = "box4.bstim"
-debug = True  # turn on counter in upper righthand corner
-
 MAXLINES = 10000
 
 def valtopos(xval, yval, xoffset=0.0, xscale=0.25, yoffset=0.0, yscale=0.25):
@@ -58,7 +53,7 @@ def readandprocessstims(
     numtrs, 
     tr, 
     timestep, 
-    debug=False
+    debug=False,
 ):
     valarray = readvecs(thefilename)
     if debug:
@@ -111,6 +106,10 @@ def readandprocessstims(
 
 
 # execution starts here
+# Configurable parameters
+initpath = "/Users/frederic/code/breathingstim"
+initfile = "box4.bstim"
+debug = True  # turn on counter in upper righthand corner
 targetscale = 0.25
 fullscreen = True
 preamblelength = 5.0
@@ -147,10 +146,6 @@ if filename:
         timestep,
         debug=False,
     )
-    print(f"{outputvals.shape=}")
-    if debug:
-        for i in range(len(outputvals)):
-            print(i, i * timestep, outputvals[i, :])
 else:
     core.quit()
 print("Stimulus initialization done")
@@ -180,7 +175,7 @@ max_slippage = 0.02  # how long to allow before treating a "slow" sync as missed
 frame = visual.Rect(win, 
     width=targetscale, 
     height=targetscale, 
-    lineWidth=4.0,
+    lineWidth=6.0,
     lineColor=(0, 0.5, 0),
     fillColor=None,
     units="height")
@@ -199,7 +194,7 @@ warning = visual.TextStim(win, height=0.05, pos=(0.0, 0.0), color=win.rgb + 0.5,
 warning.setText("Exhale")
 
 # make the counter
-counter = visual.TextStim(win, height=0.05, pos=(0.6, -0.4), color=win.rgb + 0.5, units="height")
+counter = visual.TextStim(win, height=0.05, pos=(0.0, -0.4), color=win.rgb + 0.5, units="height")
 counter.setText("")
 
 if not fullscreen:
@@ -214,12 +209,12 @@ numvalentries = len(outputvals)
 
 duration = MR_settings["volumes"] * MR_settings["TR"]
 # note: globalClock has been reset to 0.0 by launchScan()
-outputvalue = outputvals[0, :]
+"""outputvalue = outputvals[0, :]
 newpos = valtopos(outputvalue[0], outputvalue[1], xscale=targetscale, yscale=targetscale)
 target.setPos(newpos)
 frame.draw()
 target.draw()
-win.flip()
+win.flip()"""
 vol = 0
 onset = 0.0
 
