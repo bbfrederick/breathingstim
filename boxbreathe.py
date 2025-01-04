@@ -117,16 +117,16 @@ def readandprocessstims(
 # Configurable parameters
 initpath = "/Users/frederic/code/breathingstim"
 initfile = "box4.bstim"
-debug = True  # turn on counter in upper righthand corner
+debug = False  # turn on counter in upper righthand corner
 targetscale = 0.25
 fullscreen = True
-preamblelength = 5.0
-warninglength = 2.0
+preamblelength = 10.0
+warninglength = 3.0
 
 # settings for launchScan:
 MR_settings = {
     "TR": 1.33,  # duration (sec) per volume
-    "volumes": 200,  # number of whole-brain 3D volumes / frames
+    "volumes": 286,  # number of whole-brain 3D volumes / frames
     "sync": "t",  # character to use as the sync timing event; assumed to come at start of a volume
     "skip": 0,  # number of volumes lacking a sync pulse at start of scan (for T1 stabilization)
     "sound": False,  # in test mode only, play a tone as a reminder of scanner noise
@@ -159,7 +159,7 @@ else:
 print("Stimulus initialization done")
 
 win = visual.Window(
-    [2560, 1440], fullscr=fullscreen, checkTiming=False
+    [800, 600], fullscr=fullscreen, checkTiming=False
 )  # this has been moved up to the stimulus definition
 globalClock = core.Clock()
 
@@ -213,30 +213,24 @@ counter = visual.TextStim(
 )
 counter.setText("")
 
+# plot the waveforms
 if not fullscreen:
     plt.plot(outputvals[:, 0])
     plt.plot(outputvals[:, 1])
     plt.show()
 
-# place a circle on the screen at a y offset indicated by outputval[i]
-# the first TR is number 0
-whichstim = 1
-numvalentries = len(outputvals)
-
 duration = MR_settings["volumes"] * MR_settings["TR"]
 # note: globalClock has been reset to 0.0 by launchScan()
-"""outputvalue = outputvals[0, :]
-newpos = valtopos(outputvalue[0], outputvalue[1], xscale=targetscale, yscale=targetscale)
-target.setPos(newpos)
-frame.draw()
-target.draw()
-win.flip()"""
 vol = 0
 onset = 0.0
 
 # launch: operator selects Scan or Test (emulate); see API documentation
-vol = launchScan(win, MR_settings, globalClock=globalClock, wait_msg="")
+vol = launchScan(win, MR_settings, globalClock=globalClock, wait_msg="Breathe normally")
 sync_now = "Experiment start"
+
+# draw the preamble text so if will be on the screen while waiting
+preamble.draw()
+win.flip()
 
 currentindex = -1
 preambleendindex = int((preamblelength - warninglength) / timestep)
