@@ -34,7 +34,7 @@ MAXLINES = 10000
 
 class Boxbreathe:
 
-    def __init__(self, xoffset=0.0, xscale=0.25, yoffset=0.0, yscale=0.25):
+    def __init__(self, xoffset=0.0, xscale=0.25, yoffset=0.0, yscale=0.25, debug=False):
         self.xoffset = xoffset
         self.xscale = xscale
         self.yoffset = yoffset
@@ -42,7 +42,8 @@ class Boxbreathe:
         self.inhaleend = 0.25
         self.inhaleholdend = 0.5
         self.exhaleend = 0.75
-        initstim()
+        self.debug = debug
+        self.initstim()
 
     def initstim(self):
         # make the frame
@@ -67,9 +68,9 @@ class Boxbreathe:
             winwidth = self.inhaleend - winstart
             xval = -0.5
             yval = -0.5 + (thephase - winstart) / winwidth
-        elif self.inhaleend <= thephase < selfinhaleholdend:
+        elif self.inhaleend <= thephase < self.inhaleholdend:
             winstart = self.inhaleend
-            winwidth = self.selfinhaleholdend - winstart
+            winwidth = self.inhaleholdend - winstart
             xval = -0.5 + (thephase - winstart) / winwidth
             yval = 0.5
         elif self.inhaleholdend <= thephase < self.exhaleend:
@@ -77,13 +78,18 @@ class Boxbreathe:
             winwidth = self.exhaleend - winstart
             xval = 0.5
             yval = 0.5 - (thephase - winstart) / winwidth
-        else:
+        elif self.exhaleend <= thephase < 1.0:
             winstart = self.exhaleend
             winwidth = 1.0 - winstart
             xval = 0.5 - (thephase - winstart) / winwidth
-            yval = 0.5 
+            yval = -0.5
+        else:
+            print(f"{thephase} is not a legal phase value")
+            sys.exit()
         xpos = xval * self.xscale + self.xoffset
         ypos = yval * self.yscale + self.yoffset
+        if self.debug:
+            print(f"{thephase=}, {winstart=}, {winwidth=}, {xval=}, {yval=}, {xpos=}, {ypos=}")
         return [xpos, ypos]
 
     def draw(self, thephase):
@@ -91,7 +97,7 @@ class Boxbreathe:
         self.frame.draw()
         self.target.draw()
 
-    def getvalue(self):
+    def getrespvalue(self, thephase):
         return self.phasetopos(thephase)[1]
 
 
@@ -99,14 +105,18 @@ class BreathingPattern:
     thetype = None
     thephase = None
 
-    def __init__(self, thetype="boxbreathe", thephase=0.0):
+    def __init__(self, thetype="boxbreathe_square", thephase=0.0, debug=False):
+        self.debug = debug
         self.settype(thetype)
         self.setphase(thephase)
 
     def settype(self, thetype):
         self.thetype = thetype
-        if self.thetype == "boxbreathe":
-            self.stimulus = Boxbreathe()
+        if self.thetype == "boxbreathe_square":
+            self.stimulus = Boxbreathe(debug=self.debug)
+        else:
+            print("illegal stimulus type")
+            sys.exit()
 
     def gettype(self):
         return self.thetype
@@ -120,18 +130,15 @@ class BreathingPattern:
     def draw(self):
         self.stimulus.draw(self.thephase)
 
-    def getval(self):
-        self.stimulus.getval(self.thephase)
+    def getrespvalue(self):
+        self.stimulus.getrespvalue(self.thephase)
 
 
 def readexpfile(filename):
     with open(filename, "r") as json_data:
         d = json.load(json_data)
         for token in [
-            "preambletime",
             "warntime",
-            "BPM_start",
-            "BPM_end",
             "fmritime",
             "TR"]:
             try:
@@ -142,12 +149,24 @@ def readexpfile(filename):
         try:
             stimtype = d["stimtype"]
         except KeyError:
-            print(f"{token} is not defined in input file - quitting")
+            print("stimtype is not defined in input file - quitting")
             sys.exit()                
-        return float(d["preambletime"]), float(d["warntime"]), float(d["BPM_start"]), float(d["BPM_end"]), float(d["fmritime"]), float(d["TR"]), d["stimtype"]
+        try:
+            waypoints = d["waypoints"]
+        except KeyError:
+            print("waypoints array is not defined in input file - quitting")
+            sys.exit()
+        else:
+            if len(waypoints) < 1:
+                print("waypoints array needs to be a list with at least one element - quitting")
+                sys.exit()
+            for thewaypoint in waypoints:
+                if len(thewaypoint) != 3:
+                    print("each entry in waypoints array needs 3 values - quitting")
+                    sys.exit()
+            return d["waypoints"], float(d["warntime"]), float(d["fmritime"]), float(d["TR"]), d["stimtype"]
     print("file not found")
     sys.exit()
-
 
 def set_expanding_indicator(
     respval, stim, diameter=1.0, lobes=6, minval=0.25, maxval=0.5
@@ -159,114 +178,57 @@ def set_expanding_indicator(
         yloc = 0.5 * diameter * np.cos(angle)
 
 
-def valtopos(xval, yval, xoffset=0.0, xscale=0.25, yoffset=0.0, yscale=0.25):
-    xpos = xval * xscale + xoffset
-    ypos = yval * yscale + yoffset
-    return [xpos, ypos]
-
-
-def readvecs(inputfilename):
-    file = open(inputfilename)
-    lines = file.readlines(MAXLINES)
-    numvecs = len(lines[0].split())
-    inputvec = np.zeros((numvecs, MAXLINES), dtype="float")
-    numvals = 0
-    for line in lines:
-        numvals = numvals + 1
-        thetokens = line.split()
-        for vecnum in range(0, numvecs):
-            inputvec[vecnum, numvals - 1] = float(thetokens[vecnum])
-    return np.transpose(1.0 * inputvec[:, 0:numvals])
-
-
-def readandprocessstims(
-    thefilename,
-    numtrs,
-    tr,
-    timestep,
-    debug=False,
-):
-    valarray = readvecs(thefilename)
-    if debug:
-        print(valarray)
-    starttime, startx, starty = valarray[0, :]
-    finishtime = valarray[-1, 0]
-    if debug:
-        print(f"{starttime=}, {finishtime=}, {timestep=}")
-    numsteps = int(finishtime / timestep) + 1
-    specifiedvals = np.zeros((numsteps, 3), dtype=float)
-    if debug:
-        print(f"{numsteps=}, {specifiedvals.shape=}")
-    whichstep = 0
-    for i in range(1, valarray.shape[0]):
-        endtime, endx, endy = valarray[i]
-        if debug:
-            print(
-                f"{i}: {starttime=}, {endtime=}, {startx=}, {endx=}, {starty=}, {endy=}"
-            )
-        startindex = int(starttime / timestep)
-        endindex = int(endtime / timestep)
-        segsize = endindex - startindex
-        segtime = (segsize + 1) * timestep
-        if debug:
-            print(f"step {i}: {startindex=}, {endindex=}, {segsize=}")
-        if startx == endx:
-            # y is changing
-            specifiedvals[startindex:endindex, 0] = startx
-            specifiedvals[startindex:endindex, 1] = np.linspace(
-                starty, endy, num=segsize, endpoint=False, dtype=float
-            )
-        else:
-            # x is changing
-            specifiedvals[startindex:endindex, 0] = np.linspace(
-                startx, endx, num=segsize, endpoint=False, dtype=float
-            )
-            specifiedvals[startindex:endindex, 1] = starty
-        specifiedvals[startindex:endindex, 2] = segtime
-        starttime = endtime
-        startx = endx
-        starty = endy
-    numoutputvals = int(numtrs * (tr / timestep))
-    outputvals = np.zeros((numoutputvals, 3), dtype=float)
-    if numoutputvals > numsteps:
-        outputvals[:numsteps, :] = specifiedvals
-        outputvals[numsteps:, :] = specifiedvals[-1]
-    elif numoutputvals == numsteps:
-        outputvals = specifiedvals
-    else:
-        outputvals = specifiedvals[:numoutputvals, :]
-    return outputvals
-
-
+def makerespphasewaveform(waypointlist, timestep, expendtime):
+    # waypointlist is assumed to be clean
+    numpts = int(expendtime / timestep)
+    phasevals = np.zeros((numpts), dtype=float)
+    currentphase = 0.0
+    startindex = int(waypointlist[0][0] / timestep)
+    startcycletime = waypointlist[0][1]
+    if waypointlist[0][2] >= 0.0:
+        currentphase = waypointlist[0][2]
+    for [endtime, endcycletime, endval] in waypointlist[1:]:
+        endindex = np.min([int(endtime / timestep), numpts])
+        if endval >= 0.0:
+            currentphase = endval % 1.0
+        phaseincrements = timestep * np.linspace(startcycletime / 60.0, endcycletime / 60.0, num=(endindex - startindex + 1), endpoint=False)
+        for i in range(startindex, endindex):
+            phasevals[i] = (currentphase + phaseincrements[i - startindex]) % 1.0
+            currentphase = phasevals[i]
+    if endindex < numpts - 1:
+        phasevals[endindex:-1] = phasevals[endindex - 1]
+    return phasevals
+    
+    
 # execution starts here
 # Configurable parameters
 initpath = "/Users/frederic/code/breathingstim"
 initfile = "risingtime.json"
 debug = False  # turn on counter in upper righthand corner
 targetscale = 0.25
-fullscreen = True
-preamblelength = 10.0
+fullscreen = False
 warninglength = 3.0
+nominaltimestep = 0.01
 
 theexpfile = gui.fileOpenDlg(
     tryFilePath=initpath, tryFileName=initfile, allowed="*.json"
 )
 if theexpfile:
-    preambletime, warntime, BPM_start, BPM_end, fmritime, TR, stimtype = readexpfile(theexpfile[0])
-    print(preambletime, warntime, BPM_start, BPM_end, fmritime, TR, stimtype)
-    sys.exit()
+    waypoints, warntime, fmritime, TR, stimtype = readexpfile(theexpfile[0])
+    print(waypoints, warntime, fmritime, TR, stimtype)
+preamblelength = waypoints[0][0]
 
 # settings for launchScan:
 MR_settings = {
-    "TR": 1.33,  # duration (sec) per volume
-    "volumes": 286,  # number of whole-brain 3D volumes / frames
+    "TR": TR,  # duration (sec) per volume
+    "volumes": int(fmritime / TR),  # number of whole-brain 3D volumes / frames
     "sync": "t",  # character to use as the sync timing event; assumed to come at start of a volume
     "skip": 0,  # number of volumes lacking a sync pulse at start of scan (for T1 stabilization)
     "sound": False,  # in test mode only, play a tone as a reminder of scanner noise
 }
 
 # set a timestep that is ~0.1 seconds but is an integral divisor of TR
-stepspertr = int(np.round(MR_settings["TR"] / 0.01, 0))
+stepspertr = int(np.round(MR_settings["TR"] / nominaltimestep, 0))
 timestep = MR_settings["TR"] / stepspertr
 print("MR_settings initialization done")
 
@@ -275,20 +237,7 @@ infoDlg = gui.DlgFromDict(MR_settings, title="fMRI parameters", order=["TR", "vo
 if not infoDlg.OK:
     core.quit()
 
-filename = gui.fileOpenDlg(
-    tryFilePath=initpath, tryFileName=initfile, allowed="*.bstim"
-)
-if filename:
-    # generate a list of values for each TR
-    outputvals = readandprocessstims(
-        filename[0],
-        MR_settings["TR"],
-        MR_settings["volumes"],
-        timestep,
-        debug=False,
-    )
-else:
-    core.quit()
+phasevals = makerespphasewaveform(waypoints, timestep, MR_settings["TR"] * MR_settings["volumes"])
 print("Stimulus initialization done")
 
 win = visual.Window(
@@ -312,21 +261,8 @@ infer_missed_sync = False  # best if your script timing works without this, but 
 max_slippage = 0.02  # how long to allow before treating a "slow" sync as missed
 # any slippage is almost certainly due to timing issues with your script or PC, and not MR scanner
 
-# make the frame
-frame = visual.Rect(
-    win,
-    width=targetscale,
-    height=targetscale,
-    lineWidth=6.0,
-    lineColor=(0, 0.5, 0),
-    fillColor=None,
-    units="height",
-)
-
-# make the target
-target = visual.Circle(win, radius=0.03, units="height")
-target.setFillColor((0, 0.5, 0))
-target.setLineColor((0, 0.5, 0))
+# make the breathing stim
+thebreathingstim = BreathingPattern(debug=False)
 
 # make the preamble
 preamble = visual.TextStim(
@@ -348,8 +284,7 @@ counter.setText("")
 
 # plot the waveforms
 if not fullscreen:
-    plt.plot(outputvals[:, 0])
-    plt.plot(outputvals[:, 1])
+    plt.plot(phasevals)
     plt.show()
 
 duration = MR_settings["volumes"] * MR_settings["TR"]
@@ -368,6 +303,7 @@ win.flip()
 currentindex = -1
 preambleendindex = int((preamblelength - warninglength) / timestep)
 warningendindex = int(preamblelength / timestep)
+respvals = phasevals * 0.0
 print("here we go!")
 while globalClock.getTime() < duration:
     allKeys = event.getKeys()
@@ -392,17 +328,14 @@ while globalClock.getTime() < duration:
     # now draw whatever we are drawing
     now = globalClock.getTime()
     thisindex = int(now / timestep)
-    if thisindex > currentindex and thisindex < (warningendindex + outputvals.shape[0]):
+    if thisindex > currentindex and thisindex < phasevals.shape[0]:
         # time to update the display
         if thisindex >= warningendindex:
-            outputvalue = outputvals[thisindex - warningendindex, :]
-            newpos = valtopos(
-                outputvalue[0], outputvalue[1], xscale=targetscale, yscale=targetscale
-            )
-            target.setPos(newpos)
-            frame.draw()
-            target.draw()
-            counter.setText(f"Index: {thisindex:5d}, segtime: {outputvalue[2]:.3f}")
+            thebreathingstim.setphase(phasevals[thisindex])
+            thebreathingstim.draw()
+            thephase = thebreathingstim.getphase()
+            respvals[thisindex] = thebreathingstim.getrespvalue()
+            counter.setText(f"Index: {thisindex:5d}, segtime: {thephase:.3f}")
         elif thisindex >= preambleendindex:
             warning.draw()
             counter.setText(f"Index: {thisindex:5d}")
