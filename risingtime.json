@@ -1,0 +1,9 @@
+{
+    "preambletime":	10.0,
+    "warntime":		3.0,
+    "stimtype":		"boxbreathe_square",
+    "BPM_start":	5.0,
+    "BPM_end":		3.0,
+    "fmritime":		380,
+    "TR":		1.33
+}

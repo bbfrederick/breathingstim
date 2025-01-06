@@ -14,6 +14,8 @@ __author__ = "Blaise Frederick"
 
 import numpy as np
 from psychopy import core, event, gui, plugins, visual
+import json
+import sys
 
 plugins.activatePlugins()
 
@@ -22,6 +24,130 @@ from psychopy.hardware.emulator import SyncGenerator, launchScan
 
 ################################################
 MAXLINES = 10000
+
+# How to define a breathing stimulus:
+# First you decide what the respiratory type will be (boxbreathe, inhaleexhale, etc.)
+#   This defines how you breathe across the respiration cycle (when you inhale, hold, and exhale)
+# 0.0 <= respphase < 1.0 is the position within the respiration waveform for one full cycle
+# 0.0 <= respval <= 1.0 is the depth of inspiration, from full exhale to full inhale
+# respfunction is the mapping from respphase to respval
+
+class Boxbreathe:
+
+    def __init__(self, xoffset=0.0, xscale=0.25, yoffset=0.0, yscale=0.25):
+        self.xoffset = xoffset
+        self.xscale = xscale
+        self.yoffset = yoffset
+        self.yscale = yscale
+        self.inhaleend = 0.25
+        self.inhaleholdend = 0.5
+        self.exhaleend = 0.75
+        initstim()
+
+    def initstim(self):
+        # make the frame
+        self.frame = visual.Rect(
+            win,
+            width=targetscale,
+            height=targetscale,
+            lineWidth=6.0,
+            lineColor=(0, 0.5, 0),
+            fillColor=None,
+            units="height",
+        )
+
+        # make the target
+        self.target = visual.Circle(win, radius=0.03, units="height")
+        self.target.setFillColor((0, 0.5, 0))
+        self.target.setLineColor((0, 0.5, 0))
+
+    def phasetopos(self, thephase):
+        if 0.0 <= thephase < self.inhaleend:
+            winstart = 0.0
+            winwidth = self.inhaleend - winstart
+            xval = -0.5
+            yval = -0.5 + (thephase - winstart) / winwidth
+        elif self.inhaleend <= thephase < selfinhaleholdend:
+            winstart = self.inhaleend
+            winwidth = self.selfinhaleholdend - winstart
+            xval = -0.5 + (thephase - winstart) / winwidth
+            yval = 0.5
+        elif self.inhaleholdend <= thephase < self.exhaleend:
+            winstart = self.inhaleholdend
+            winwidth = self.exhaleend - winstart
+            xval = 0.5
+            yval = 0.5 - (thephase - winstart) / winwidth
+        else:
+            winstart = self.exhaleend
+            winwidth = 1.0 - winstart
+            xval = 0.5 - (thephase - winstart) / winwidth
+            yval = 0.5 
+        xpos = xval * self.xscale + self.xoffset
+        ypos = yval * self.yscale + self.yoffset
+        return [xpos, ypos]
+
+    def draw(self, thephase):
+        self.target.setPos(self.phasetopos(thephase))
+        self.frame.draw()
+        self.target.draw()
+
+    def getvalue(self):
+        return self.phasetopos(thephase)[1]
+
+
+class BreathingPattern:
+    thetype = None
+    thephase = None
+
+    def __init__(self, thetype="boxbreathe", thephase=0.0):
+        self.settype(thetype)
+        self.setphase(thephase)
+
+    def settype(self, thetype):
+        self.thetype = thetype
+        if self.thetype == "boxbreathe":
+            self.stimulus = Boxbreathe()
+
+    def gettype(self):
+        return self.thetype
+
+    def setphase(self, thephase):
+        self.thephase = thephase
+
+    def getphase(self):
+        return self.thephase
+
+    def draw(self):
+        self.stimulus.draw(self.thephase)
+
+    def getval(self):
+        self.stimulus.getval(self.thephase)
+
+
+def readexpfile(filename):
+    with open(filename, "r") as json_data:
+        d = json.load(json_data)
+        for token in [
+            "preambletime",
+            "warntime",
+            "BPM_start",
+            "BPM_end",
+            "fmritime",
+            "TR"]:
+            try:
+                inval = float(d[token])
+            except KeyError:
+                print(f"{token} is not defined in input file - quitting")
+                sys.exit()
+        try:
+            stimtype = d["stimtype"]
+        except KeyError:
+            print(f"{token} is not defined in input file - quitting")
+            sys.exit()                
+        return float(d["preambletime"]), float(d["warntime"]), float(d["BPM_start"]), float(d["BPM_end"]), float(d["fmritime"]), float(d["TR"]), d["stimtype"]
+    print("file not found")
+    sys.exit()
+
 
 def set_expanding_indicator(
     respval, stim, diameter=1.0, lobes=6, minval=0.25, maxval=0.5
@@ -115,12 +241,20 @@ def readandprocessstims(
 # execution starts here
 # Configurable parameters
 initpath = "/Users/frederic/code/breathingstim"
-initfile = "box4.bstim"
+initfile = "risingtime.json"
 debug = False  # turn on counter in upper righthand corner
 targetscale = 0.25
 fullscreen = True
 preamblelength = 10.0
 warninglength = 3.0
+
+theexpfile = gui.fileOpenDlg(
+    tryFilePath=initpath, tryFileName=initfile, allowed="*.json"
+)
+if theexpfile:
+    preambletime, warntime, BPM_start, BPM_end, fmritime, TR, stimtype = readexpfile(theexpfile[0])
+    print(preambletime, warntime, BPM_start, BPM_end, fmritime, TR, stimtype)
+    sys.exit()
 
 # settings for launchScan:
 MR_settings = {
