@@ -145,7 +145,7 @@ def readexpfile(filename):
             print(f"{token} is not defined in input file - quitting")
             sys.exit()                
         return float(d["preambletime"]), float(d["warntime"]), float(d["BPM_start"]), float(d["BPM_end"]), float(d["fmritime"]), float(d["TR"]), d["stimtype"]
-    print("file not found")
+    print(f"could not open input file {filename}")
     sys.exit()
 
 
