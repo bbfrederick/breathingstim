@@ -12,10 +12,11 @@ offline, without requiring either a scanner or a hardware sync pulse emulator.
 
 __author__ = "Blaise Frederick"
 
-import numpy as np
-from psychopy import core, event, gui, plugins, visual
 import json
 import sys
+
+import numpy as np
+from psychopy import core, event, gui, plugins, visual
 
 plugins.activatePlugins()
 
@@ -31,6 +32,7 @@ MAXLINES = 10000
 # 0.0 <= respphase < 1.0 is the position within the respiration waveform for one full cycle
 # 0.0 <= respval <= 1.0 is the depth of inspiration, from full exhale to full inhale
 # respfunction is the mapping from respphase to respval
+
 
 class Boxbreathe:
 
@@ -89,7 +91,9 @@ class Boxbreathe:
         xpos = xval * self.xscale + self.xoffset
         ypos = yval * self.yscale + self.yoffset
         if self.debug:
-            print(f"{thephase=}, {winstart=}, {winwidth=}, {xval=}, {yval=}, {xpos=}, {ypos=}")
+            print(
+                f"{thephase=}, {winstart=}, {winwidth=}, {xval=}, {yval=}, {xpos=}, {ypos=}"
+            )
         return [xpos, ypos]
 
     def draw(self, thephase):
@@ -137,10 +141,7 @@ class BreathingPattern:
 def readexpfile(filename):
     with open(filename, "r") as json_data:
         d = json.load(json_data)
-        for token in [
-            "warntime",
-            "fmritime",
-            "TR"]:
+        for token in ["warntime", "fmritime", "TR"]:
             try:
                 inval = float(d[token])
             except KeyError:
@@ -158,15 +159,24 @@ def readexpfile(filename):
             sys.exit()
         else:
             if len(waypoints) < 1:
-                print("waypoints array needs to be a list with at least one element - quitting")
+                print(
+                    "waypoints array needs to be a list with at least one element - quitting"
+                )
                 sys.exit()
             for thewaypoint in waypoints:
                 if len(thewaypoint) != 3:
                     print("each entry in waypoints array needs 3 values - quitting")
                     sys.exit()
-            return d["waypoints"], float(d["warntime"]), float(d["fmritime"]), float(d["TR"]), d["stimtype"]
+            return (
+                d["waypoints"],
+                float(d["warntime"]),
+                float(d["fmritime"]),
+                float(d["TR"]),
+                d["stimtype"],
+            )
     print("file not found")
     sys.exit()
+
 
 def set_expanding_indicator(
     respval, stim, diameter=1.0, lobes=6, minval=0.25, maxval=0.5
@@ -191,15 +201,20 @@ def makerespphasewaveform(waypointlist, timestep, expendtime):
         endindex = np.min([int(endtime / timestep), numpts])
         if endval >= 0.0:
             currentphase = endval % 1.0
-        phaseincrements = timestep * np.linspace(startcycletime / 60.0, endcycletime / 60.0, num=(endindex - startindex + 1), endpoint=False)
+        phaseincrements = timestep * np.linspace(
+            startcycletime / 60.0,
+            endcycletime / 60.0,
+            num=(endindex - startindex + 1),
+            endpoint=False,
+        )
         for i in range(startindex, endindex):
             phasevals[i] = (currentphase + phaseincrements[i - startindex]) % 1.0
             currentphase = phasevals[i]
     if endindex < numpts - 1:
         phasevals[endindex:-1] = phasevals[endindex - 1]
     return phasevals
-    
-    
+
+
 # execution starts here
 # Configurable parameters
 initpath = "/Users/frederic/code/breathingstim"
@@ -237,7 +252,9 @@ infoDlg = gui.DlgFromDict(MR_settings, title="fMRI parameters", order=["TR", "vo
 if not infoDlg.OK:
     core.quit()
 
-phasevals = makerespphasewaveform(waypoints, timestep, MR_settings["TR"] * MR_settings["volumes"])
+phasevals = makerespphasewaveform(
+    waypoints, timestep, MR_settings["TR"] * MR_settings["volumes"]
+)
 print("Stimulus initialization done")
 
 win = visual.Window(

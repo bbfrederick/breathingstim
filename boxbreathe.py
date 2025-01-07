@@ -23,6 +23,7 @@ from psychopy.hardware.emulator import SyncGenerator, launchScan
 ################################################
 MAXLINES = 10000
 
+
 def set_expanding_indicator(
     respval, stim, diameter=1.0, lobes=6, minval=0.25, maxval=0.5
 ):
