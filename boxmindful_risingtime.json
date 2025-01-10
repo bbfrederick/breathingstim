@@ -1,0 +1,9 @@
+{
+    "warntime":		3.0,
+    "stimtype":		"boxbreathe_mindful",
+    "waypoints":	[[10.0, 5.0, -1],
+			 [380.0, 3.0, -1]],
+    "BPM_end":		3.0,
+    "fmritime":		380.0,
+    "TR":		1.33
+}

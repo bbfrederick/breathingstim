@@ -34,8 +34,67 @@ MAXLINES = 10000
 # respfunction is the mapping from respphase to respval
 
 
-class Boxbreathe:
+class Mindful:
+    def __init__(self, scale=0.125, lobes=9, minrad=0.25, maxrad=1.0, debug=False):
+        self.scale = scale
+        self.lobes = lobes
+        self.minrad = minrad
+        self.maxrad = maxrad
+        self.inhaleend = 0.25
+        self.inhaleholdend = 0.5
+        self.exhaleend = 0.75
+        self.thecircles = []
+        self.debug = debug
+        self.initstim()
 
+    def initstim(self):
+        for i in range(self.lobes):
+            self.thecircles.append(visual.Circle(win, radius=1.0, units="height"))
+            self.thecircles[-1].setFillColor(None)
+            self.thecircles[-1].setLineColor((0, 0.5, 0))
+            self.thecircles[-1].setLineWidth(6.0)
+        if self.debug:
+            print(f"Expanding indicator initialized with {len(self.thecircles)} lobes")
+
+    def phasetorad(self, thephase):
+        radslope = self.maxrad - self.minrad
+        if 0.0 <= thephase < self.inhaleend:
+            winstart = 0.0
+            winwidth = self.inhaleend - winstart
+            radval = self.minrad + radslope * (thephase - winstart) / winwidth
+        elif self.inhaleend <= thephase < self.inhaleholdend:
+            radval = self.maxrad
+        elif self.inhaleholdend <= thephase < self.exhaleend:
+            winstart = self.inhaleholdend
+            winwidth = self.exhaleend - winstart
+            radval = self.maxrad - radslope * (thephase - winstart) / winwidth
+        elif self.exhaleend <= thephase < 1.0:
+            radval = self.minrad
+        else:
+            print(f"{thephase} is not a legal phase value")
+            sys.exit()
+        therad = radval * self.scale
+        if self.debug:
+            print(f"Ph: {thephase}, Rad: {therad}")
+        return therad
+
+    def draw(self, thephase):
+        therad = self.phasetorad(thephase)
+        for i in range(self.lobes):
+            angle = i * 2.0 * np.pi / self.lobes
+            xloc = therad * np.sin(angle)
+            yloc = therad * np.cos(angle)
+            self.thecircles[i].setRadius(therad)
+            self.thecircles[i].setPos([xloc, yloc])
+            self.thecircles[i].draw()
+
+    def getrespvalue(self, thephase):
+        return (self.phasetorad(thephase) - self.minrad) / (
+            self.maxrad - self.minrad
+        ) - 0.5
+
+
+class Boxbreathe:
     def __init__(self, xoffset=0.0, xscale=0.25, yoffset=0.0, yscale=0.25, debug=False):
         self.xoffset = xoffset
         self.xscale = xscale
@@ -118,6 +177,8 @@ class BreathingPattern:
         self.thetype = thetype
         if self.thetype == "boxbreathe_square":
             self.stimulus = Boxbreathe(debug=self.debug)
+        elif self.thetype == "boxbreathe_mindful":
+            self.stimulus = Mindful(debug=self.debug)
         else:
             print("illegal stimulus type")
             sys.exit()
@@ -279,7 +340,9 @@ max_slippage = 0.02  # how long to allow before treating a "slow" sync as missed
 # any slippage is almost certainly due to timing issues with your script or PC, and not MR scanner
 
 # make the breathing stim
-thebreathingstim = BreathingPattern(debug=False)
+print("initializing the class")
+thebreathingstim = BreathingPattern(thetype=stimtype, debug=False)
+print("done initializing the class")
 
 # make the preamble
 preamble = visual.TextStim(
