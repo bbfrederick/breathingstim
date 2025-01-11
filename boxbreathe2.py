@@ -74,7 +74,7 @@ class Mindful:
         else:
             print(f"{thephase} is not a legal phase value")
             sys.exit()
-        therad = radval * self.scale
+        therad = np.sqrt(radval) * self.scale
         if self.debug:
             print(f"Ph: {thephase}, Rad: {therad}")
         return therad
