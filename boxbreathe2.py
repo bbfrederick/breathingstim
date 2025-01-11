@@ -16,6 +16,7 @@ import json
 import sys
 
 import numpy as np
+import pandas as pd
 from psychopy import core, event, gui, plugins, visual
 
 plugins.activatePlugins()
@@ -276,6 +277,29 @@ def makerespphasewaveform(waypointlist, timestep, expendtime):
     return phasevals
 
 
+def writebidstsv(indata, nameroot, colname, samplerate):
+    columns = [colname]
+    df = pd.DataFrame(data=np.transpose(indata), columns=columns)
+    df.to_csv(
+        nameroot + ".tsv.gz",
+        sep="\t",
+        compression="gzip",
+        header=False,
+        index=False,
+    )
+    headerdict = {}
+    headerdict["SamplingFrequency"] = float(samplerate)
+    headerdict["StartTime"] = float(0.0)
+    headerdict["Columns"] = columns
+
+    with open(nameroot + ".json", "wb") as fp:
+        fp.write(
+            json.dumps(
+                headerdict, sort_keys=True, indent=4, separators=(",", ":")
+            ).encode("utf-8")
+        )
+
+
 # execution starts here
 # Configurable parameters
 initpath = "/Users/frederic/code/breathingstim"
@@ -344,6 +368,14 @@ print("initializing the class")
 thebreathingstim = BreathingPattern(thetype=stimtype, debug=False)
 print("done initializing the class")
 
+# save the target respiratory waveform
+respwaveroot = theexpfile[0].replace(".json", "")
+respvals = phasevals * 0.0
+for thisindex in range(phasevals.shape[0]):
+    thebreathingstim.setphase(phasevals[thisindex])
+    respvals[thisindex] = thebreathingstim.getrespvalue()
+writebidstsv(respvals, respwaveroot, "respvals", 1.0 / timestep)
+
 # make the preamble
 preamble = visual.TextStim(
     win, height=0.05, pos=(0.0, 0.0), color=win.rgb + 0.5, units="height"
@@ -380,10 +412,11 @@ sync_now = "Experiment start"
 preamble.draw()
 win.flip()
 
+
+# here's the main execution loop
 currentindex = -1
 preambleendindex = int((preamblelength - warninglength) / timestep)
 warningendindex = int(preamblelength / timestep)
-respvals = phasevals * 0.0
 print("here we go!")
 while globalClock.getTime() < duration:
     allKeys = event.getKeys()
@@ -414,7 +447,6 @@ while globalClock.getTime() < duration:
             thebreathingstim.setphase(phasevals[thisindex])
             thebreathingstim.draw()
             thephase = thebreathingstim.getphase()
-            respvals[thisindex] = thebreathingstim.getrespvalue()
             counter.setText(f"Index: {thisindex:5d}, segtime: {thephase:.3f}")
         elif thisindex >= preambleendindex:
             warning.draw()
