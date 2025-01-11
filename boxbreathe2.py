@@ -197,7 +197,7 @@ class BreathingPattern:
         self.stimulus.draw(self.thephase)
 
     def getrespvalue(self):
-        self.stimulus.getrespvalue(self.thephase)
+        return self.stimulus.getrespvalue(self.thephase)
 
 
 def readexpfile(filename):
@@ -238,16 +238,6 @@ def readexpfile(filename):
             )
     print("file not found")
     sys.exit()
-
-
-def set_expanding_indicator(
-    respval, stim, diameter=1.0, lobes=6, minval=0.25, maxval=0.5
-):
-    currentsize = (respval * (maxval - minval) + minval) * diameter
-    for i in range(lobes):
-        angle = i * 360.0 / lobes
-        xloc = 0.5 * diameter * np.sin(angle)
-        yloc = 0.5 * diameter * np.cos(angle)
 
 
 def makerespphasewaveform(waypointlist, timestep, expendtime):
@@ -369,7 +359,7 @@ thebreathingstim = BreathingPattern(thetype=stimtype, debug=False)
 print("done initializing the class")
 
 # save the target respiratory waveform
-respwaveroot = theexpfile[0].replace(".json", "")
+respwaveroot = theexpfile[0].replace(".json", "_respwave")
 respvals = phasevals * 0.0
 for thisindex in range(phasevals.shape[0]):
     thebreathingstim.setphase(phasevals[thisindex])
